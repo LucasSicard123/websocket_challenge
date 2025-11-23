@@ -1,9 +1,10 @@
 import {useEffect, useState} from 'react'
 import './App.css'
+import {CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis} from "recharts";
 
 type webData = {
     flow_gpm: number;
-    power_kw: number;
+    power_kW: number;
     pressure_psi: number;
     pressure_bar: number;
     sensor_alarm: boolean;
@@ -12,50 +13,125 @@ type webData = {
 };
 
 function App() {
-    const [data, setData] = useState<webData | null>(null);
     const [open, setOpen] = useState(false);
+    const [webSocket, setSocket] = useState<WebSocket | null>(null);
+    const [messageHistory, setHistory] = useState<webData[]>([]);
 
-
-    useEffect(() => {
+    const openSocket = () => {
         const socket = new WebSocket("wss://frontend-dev-interview-challenge-production.up.railway.app/ws");
 
-        if (open) {
-            socket.addEventListener("open", () => {
-                socket.send("Connection established");
-            });
+        socket.addEventListener("message", event => {
+            const info = JSON.parse(event.data);
+            const date = new Date(info.timestamp);
 
-            socket.addEventListener("message", event => {
-                const info = JSON.parse(event.data);
-                setData({
-                    flow_gpm: info.flow_gpm,
-                    power_kw: info.power_kw,
-                    pressure_psi: info.pressure_psi,
-                    pressure_bar: info.pressure_bar,
-                    sensor_alarm: info.sensor_alarm,
-                    timestamp: new Date(info.timestamp),
-                    message_type: info.message_type
-                });
+            messageHistory.push({
+                flow_gpm: info.flow_gpm,
+                power_kW: info.power_kW,
+                pressure_psi: info.pressure_psi,
+                pressure_bar: info.pressure_bar,
+                sensor_alarm: info.sensor_alarm,
+                timestamp: date,
+                message_type: info.message_type
             });
+        });
+
+        socket.addEventListener("error", event => {
+            console.error(event);
+        });
+
+        socket.addEventListener("close", () => {
+            console.log("closed");
+        });
+
+        setSocket(socket);
+    }
+
+    const closeSocket = () => {
+        if (webSocket) {
+            webSocket.close();
+        }
+    }
+
+    useEffect(() => {
+        if (open) {
+            openSocket()
         } else {
-            socket.removeEventListener("message", () => {});
-            socket.close();
+            closeSocket()
         }
     }, [open]);
 
+
+    const [arr, setArr] = useState<webData[]>([]);
+
+    useEffect(() => {
+        if (open) {
+            setTimeout(() => {
+                setArr((prevState) => ([...prevState, messageHistory[messageHistory.length-1]]).slice(-20));
+            }, 500);
+        }
+    },[arr, open]);
+
     return (
         <>
-            <button onClick={() => setOpen(!open)}>{open ? "True" : "False"}</button>
-            {data ? (
-                <div>
-                    <p>Flow: {data.flow_gpm}</p>
-                    <p>{data.power_kw}</p>
-                    <p>{data.pressure_psi}</p>
-                    <p>{data.pressure_bar}</p>
-                    <p>{data.sensor_alarm ? "True" : "False"}</p>
-                    <p>{data.timestamp.toDateString()}</p>
-                    <p>{data.message_type}</p>
-                </div>
-            ) : <>No Data</>}
+            <button onClick={() => setOpen(!open)}>{open ? "Disconnect" : "Connect"}</button>
+            <br/>
+            <h3>Connection Status: {webSocket && !webSocket.CLOSED ? "Connected" : "Disconnected"}</h3>
+            <br/>
+            {messageHistory.length > 0 ?
+                <>
+                    <button onClick={() => setHistory([])}>Clear History</button>
+                    <br/>
+                    <span>{messageHistory[0].timestamp.toTimeString()} - {messageHistory[messageHistory.length-1].timestamp.toTimeString()}</span>
+                    <br/>
+                    <br/>
+                    <span style={{display: "flex", lineHeight: "20px", justifyContent: "center", fontWeight: "bold"}}>Sensor Alarm:&nbsp;{messageHistory[messageHistory.length-1].sensor_alarm ?
+                        <div style={{borderRadius: "50%", backgroundColor: "green", width: "20px", height: "20px"}}></div> :
+                        <div style={{borderRadius: "50%", backgroundColor: "red", width: "20px", height: "20px"}}></div>
+                    }</span>
+                    <div style={{display: "flex", flexWrap: "wrap", justifyContent: "space-evenly"}}>
+                        <div>
+                            <h1>Flow (GPM)</h1>
+                            <LineChart style={{ width: '500px', aspectRatio: 1.618, maxWidth: 800, margin: 'auto' }} responsive data={arr}>
+                                <CartesianGrid stroke="#eee" strokeDasharray="3 3" />
+                                <XAxis dataKey={"timestamp"} />
+                                <YAxis dataKey={"flow_gpm"} />
+                                <Tooltip wrapperStyle={{color: "black"}}/>
+                                <Line type="monotone" dataKey="flow_gpm" stroke="#eee" />
+                            </LineChart>
+                        </div>
+                        <div>
+                            <h1>Pressure (PSI)</h1>
+                            <LineChart style={{ width: '500px', aspectRatio: 1.618, maxWidth: 800, margin: 'auto' }} responsive data={arr}>
+                                <CartesianGrid stroke="#eee" strokeDasharray="3 3" />
+                                <XAxis dataKey={"timestamp"} />
+                                <YAxis dataKey={"pressure_psi"} />
+                                <Tooltip wrapperStyle={{color: "black"}}/>
+                                <Line type="monotone" dataKey="pressure_psi" stroke="#eee" />
+                            </LineChart>
+                        </div>
+                        <div>
+                            <h1>Pressure (Bar)</h1>
+                            <LineChart style={{ width: '500px', aspectRatio: 1.618, maxWidth: 800, margin: 'auto' }} responsive data={arr}>
+                                <CartesianGrid stroke="#eee" strokeDasharray="3 3" />
+                                <XAxis dataKey={"timestamp"} />
+                                <YAxis dataKey={"pressure_bar"} />
+                                <Tooltip wrapperStyle={{color: "black"}}/>
+                                <Line type="monotone" dataKey="pressure_bar" stroke="#eee" />
+                            </LineChart>
+                        </div>
+                        <div>
+                            <h1>Power (kW)</h1>
+                            <LineChart style={{ width: '500px', aspectRatio: 1.618, maxWidth: 800, margin: 'auto' }} responsive data={arr}>
+                                <CartesianGrid stroke="#eee" strokeDasharray="3 3" />
+                                <XAxis dataKey={"timestamp"} />
+                                <YAxis dataKey={"power_kW"} />
+                                <Tooltip wrapperStyle={{color: "black"}}/>
+                                <Line type="monotone" dataKey="power_kW" stroke="#eee" />
+                            </LineChart>
+                        </div>
+                    </div>
+                </>
+                : <>No message history</>}
         </>
     );
 }
